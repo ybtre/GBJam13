@@ -38,6 +38,7 @@ import rl "vendor:raylib"
 //  Enemy = extra damage.
 //  Potion = poison damage.
 //  Treasure = mimic (HP loss).
+//
 
 /////////////////////////////////////////////////////////////////////
 compute_row_values :: proc(row_idx: int) -> row_values {
@@ -181,11 +182,11 @@ generate_dungeon :: proc(seed : u64) {
                 GameState.rows[row_idx].cards[i].visual.render = true
             }
             else if card_type == .POTION {
-                GameState.rows[row_idx].cards[i].visual.color = C_GREEN
+                GameState.rows[row_idx].cards[i].visual.color = C_ORANGE
                 GameState.rows[row_idx].cards[i].visual.render = true
             }
             else if card_type == .TREASURE {
-                GameState.rows[row_idx].cards[i].visual.color = C_YELLOW
+                GameState.rows[row_idx].cards[i].visual.color = C_ORANGE
                 GameState.rows[row_idx].cards[i].visual.render = true
             }
             GameState.rows[row_idx].cards[i].stats_card = card
@@ -473,6 +474,34 @@ update :: proc() {
 }
 
 /////////////////////////////////////////////////////////////////////
+DrawIcon_Enemy :: proc(x, y, s: i32) {
+    using rl
+
+    DrawRectangle(x, y, s, s, C_PURPLE)
+    DrawRectangleLines(x, y, s, s, C_YELLOW)
+}
+
+/////////////////////////////////////////////////////////////////////
+DrawIcon_Potion :: proc(x, y, r: i32) {
+    using rl
+
+    DrawCircle(x-1, y+3, f32(r-1), C_GREEN)
+    DrawCircleLines(x-1, y+3, f32(r-1), C_PURPLE)
+
+    DrawCircle(x+2, y-1, f32(r-2), C_GREEN)
+    DrawCircleLines(x+2, y-1, f32(r-2), C_PURPLE)
+
+    DrawCircle(x, y-4, f32(r-2), C_GREEN)
+    DrawCircleLines(x, y-4, f32(r-2), C_PURPLE)
+}
+
+/////////////////////////////////////////////////////////////////////
+DrawIcon_Treasure :: proc(x, y, r: i32) {
+    rl.DrawCircle(x, y, f32(r), C_GREEN)
+    rl.DrawCircleLines(x, y, f32(r), C_PURPLE)
+}
+
+/////////////////////////////////////////////////////////////////////
 render :: proc() {
     using rl
     using strings
@@ -541,26 +570,57 @@ render :: proc() {
                 for i := 0; i < CARDS_PER_ROW; i+=1  {
                     card := &GameState.rows[current_row_idx].cards[i]
 
+                    x := f32(40 * (i + 1) - 6)
+                    y := GameData.internal_res.y / 2 + 28
+
                     card.visual.dest = Rectangle{
-                        f32(40 * (i + 1) - 6),
-                        GameData.internal_res.y / 2 + 28,
+                        x,
+                        y,
                         12, 16
                     }
 
                     DrawRectangleRec(card.visual.dest, card.visual.color)
+
+                    if card.type == .ENEMY
+                    {
+                        DrawIcon_Enemy(i32(x+3), i32(y+4), 6)
+                    }
+                    if card.type == .POTION
+                    {
+                        DrawIcon_Potion(i32(x+6), i32(y+8), 4)
+                    }
+                    if card.type == .TREASURE
+                    {
+
+                    }
                 }
 
                 for row_idx := current_row_idx + 1; row_idx < ROWS; row_idx += 1 {
                     for card_idx := 0; card_idx < CARDS_PER_ROW; card_idx += 1  {
                         card := &GameState.rows[row_idx].cards[card_idx]
 
+                        x := f32(40 * (card_idx + 1) - 6)
+                        y := f32(100) - f32((row_idx - current_row_idx) * 24)
+
                         card.visual.dest = Rectangle{
-                            f32(40 * (card_idx + 1) - 6),
-                            f32(100) - f32((row_idx - current_row_idx) * 24),
+                            x, y,
                             12, 16
                         }
 
                         DrawRectangleRec(card.visual.dest, card.visual.color)
+
+                        if card.type == .ENEMY
+                        {
+                            DrawIcon_Enemy(i32(x+3), i32(y+4), 6)
+                        }
+                        if card.type == .POTION
+                        {
+                            DrawIcon_Potion(i32(x+6), i32(y+8), 4)
+                        }
+                        if card.type == .TREASURE
+                        {
+
+                        }
                     }
                 }
 
