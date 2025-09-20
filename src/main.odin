@@ -3,6 +3,7 @@ package unlucky_dungeon
 import "core:fmt"
 import "core:mem"
 import "core:math"
+import "core:strings"
 import rl "vendor:raylib"
 
 /////////////////////////////////////////////////////////////////////
@@ -282,7 +283,7 @@ window_setup :: proc() {
   // Important: nearest-neighbor filter so scaled pixels are sharp
   SetTextureFilter(GameData.rt.texture, TextureFilter.POINT)
 
-  SetExitKey(KeyboardKey.ESCAPE)
+  SetExitKey(KeyboardKey.Q)
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -298,147 +299,464 @@ game_setup :: proc() {
     GameData.internal_res.y / 2 + 50,
     12, 16}
 
-  InitGameState()
-
-  /* choose once per run, record for logs */
-  run_seed := u64(0xBADC0FFEE)
-  GameState.seed = run_seed
-  generate_dungeon(GameState.seed)
+  GameState.menu_state = .MAIN_MENU
+  GameState.selected_menu_btn = 0
+  // InitRunState()
 }
 
 /////////////////////////////////////////////////////////////////////
-InitGameState :: proc()
+InitRunState :: proc()
 {
-    using rl
-
     reset_player()
 
     GameState.card_selected_idx = 1;
+
+    // choose once per run, record for logs
+    run_seed := u64(0xBADC0FFEE)
+    GameState.seed = run_seed
+    generate_dungeon(GameState.seed)
+
+    GameState.menu_state = .DUNGEON
 }
 
 /////////////////////////////////////////////////////////////////////
 process_input :: proc() {
     using rl
-    if rl.IsKeyPressed(.A) || IsKeyPressed(.LEFT){
-        GameState.card_selected_idx -= 1
-    }
-    if rl.IsKeyPressed(.D) || IsKeyPressed(.RIGHT){
-        GameState.card_selected_idx += 1
-    }
 
-    //clamp card selected idx
-    if GameState.card_selected_idx < 0 {
-        GameState.card_selected_idx = 0
-    }
-    if GameState.card_selected_idx > 2 {
-        GameState.card_selected_idx = 2
-    }
+    switch GameState.menu_state {
+    case .MAIN_MENU:
+        {
+            selected := &GameState.selected_menu_btn
+
+            if IsKeyPressed(.S) || IsKeyPressed(.DOWN){
+                selected^ += 1
+            }
+            if IsKeyPressed(.W) || IsKeyPressed(.UP){
+                selected^ -= 1
+            }
+
+            if selected^ < 0 { selected^ = 0 }
+            if selected^ > 2 { selected^ = 2}
+
+            if IsKeyPressed(.SPACE) || IsKeyPressed(.ENTER)
+            {
+                if selected^ == 0
+                {
+                   InitRunState()
+                }
+                else if selected^ == 1
+                {
+                    GameState.menu_state = .HOW_TO_PLAY
+                }
+                else if selected^ == 2
+                {
+                   CloseWindow()
+                }
+            }
+            if IsKeyPressed(.ESCAPE)
+            {
+                CloseWindow()
+            }
+        }
+    case .DUNGEON:
+        {
+            if IsKeyPressed(.A) || IsKeyPressed(.LEFT){
+                GameState.card_selected_idx -= 1
+            }
+            if IsKeyPressed(.D) || IsKeyPressed(.RIGHT){
+                GameState.card_selected_idx += 1
+            }
+
+            //clamp card selected idx
+            if GameState.card_selected_idx < 0 {
+                GameState.card_selected_idx = 0
+            }
+            if GameState.card_selected_idx > 2 {
+                GameState.card_selected_idx = 2
+            }
 
 
-    if IsKeyPressed(.SPACE) || IsKeyPressed(.ENTER)
-    {
-        current_row_idx := Objects[0].stats_player.row_current
-        GameState.rows[current_row_idx].selected_card = GameState.card_selected_idx
+            if IsKeyPressed(.SPACE) || IsKeyPressed(.ENTER)
+            {
+                current_row_idx := Objects[0].stats_player.row_current
+                GameState.rows[current_row_idx].selected_card = GameState.card_selected_idx
 
-        resolve_move()
-    }
-    if IsKeyPressed(.R)
-    {
-       reset_player()
+                resolve_move()
+            }
+            if IsKeyPressed(.R)
+            {
+                InitRunState()
+            }
+        }
+    case .VICTORY:
+        {
+            if IsKeyPressed(.R)
+            {
+                InitRunState()
+            }
+
+            if IsKeyPressed(.ESCAPE)
+            {
+                GameState.menu_state = .MAIN_MENU
+            }
+        }
+    case .DEFEAT:
+        {
+            selection := &GameState.selected_menu_btn
+            if IsKeyPressed(.UP) || IsKeyPressed(.W) {
+                selection^ = 0
+            }
+            if IsKeyPressed(.DOWN) || IsKeyPressed(.S) {
+                selection^ = 1
+            }
+            if IsKeyPressed(.ENTER) || IsKeyPressed(.SPACE) {
+                if selection^ == 0 {
+                    InitRunState()
+                }
+                if selection^ == 1
+                {
+                    GameState.menu_state = .MAIN_MENU
+                }
+            }
+            if IsKeyPressed(.ESCAPE)
+            {
+                GameState.menu_state = .MAIN_MENU
+            }
+        }
+    case .HOW_TO_PLAY:
+        {
+            if IsKeyPressed(.BACKSPACE) ||
+                IsKeyPressed(.ESCAPE) ||
+                IsKeyPressed(.ENTER) ||
+                IsKeyPressed(.SPACE)
+            {
+                GameState.menu_state = .MAIN_MENU
+            }
+        }
     }
 }
 
 /////////////////////////////////////////////////////////////////////
 update :: proc() {
-    if GameState.resolve_move == true {
-        next_row := Objects[0].stats_player.row_current + 1
 
-        if next_row < ROWS {
-           Objects[0].stats_player.row_current = next_row
+    #partial switch GameState.menu_state {
+    case .MAIN_MENU:
+        {
+
         }
+    case .DUNGEON:
+        {
+            player := &Objects[0]
 
-        GameState.resolve_move = false
+            if player.stats_player.hp <= 0
+            {
+               GameState.menu_state = .DEFEAT
+            }
+
+            if GameState.resolve_move == true {
+                next_row := player.stats_player.row_current + 1
+
+                if next_row < ROWS {
+                   player.stats_player.row_current = next_row
+                }
+
+                GameState.resolve_move = false
+
+                if next_row >= 13
+                {
+                    GameState.menu_state = .VICTORY
+                }
+            }
+
+        }
     }
 }
 
 /////////////////////////////////////////////////////////////////////
 render :: proc() {
     using rl
+    using strings
 
-    rl.BeginTextureMode(GameData.rt)
-        rl.ClearBackground(C_PURPLE)
+    w := i32(GameData.internal_res.x)
+    h := i32(GameData.internal_res.y)
 
-        rl.DrawRectangleRec(Objects[0].visual.dest, Objects[0].visual.color)
+    BeginTextureMode(GameData.rt)
 
-        current_row_idx := Objects[0].stats_player.row_current
-        for i := 0; i < CARDS_PER_ROW; i+=1  {
-            card := &GameState.rows[current_row_idx].cards[i]
+        switch GameState.menu_state {
+        case .MAIN_MENU:
+            {
+                ClearBackground(C_YELLOW)
 
-            card.visual.dest = Rectangle{
-                f32(40 * (i + 1) - 6),
-                GameData.internal_res.y / 2 + 28,
-                12, 16
-            }
+                font_sz : i32 = 2
+                y0 :i32= 48
+                gap :i32= 22
 
-            rl.DrawRectangleRec(card.visual.dest, card.visual.color)
-        }
+                selected := &GameState.selected_menu_btn
 
-        for row_idx := current_row_idx + 1; row_idx < ROWS; row_idx += 1 {
-            for card_idx := 0; card_idx < CARDS_PER_ROW; card_idx += 1  {
-                card := &GameState.rows[row_idx].cards[card_idx]
+                for i in 0..<len(main_menu_options) {
+                    label := main_menu_options[i]
+                    tw := MeasureText(clone_to_cstring(label, context.temp_allocator), font_sz)
 
-                card.visual.dest = Rectangle{
-                    f32(40 * (card_idx + 1) - 6),
-                    f32(100) - f32((row_idx - current_row_idx) * 24),
-                    12, 16
+                    // bordered button box around text
+                    bx :i32= w/2 - (tw/2) - 6
+                    by :i32= y0 + i32(i) * gap - 4
+                    bw := tw + 12
+                    bh := font_sz + 16
+
+                    active := i == selected^
+
+                    // outline
+                    DrawRectangleLines(bx, by, bw, bh, C_PURPLE)
+
+                    if active {
+                        DrawRectangle(bx, by, bw, bh, C_GREEN)
+                        DrawText(clone_to_cstring(label, context.temp_allocator),
+                            bx + 6, by + 4,
+                            font_sz, C_YELLOW)
+                    } else {
+                        DrawText(clone_to_cstring(label, context.temp_allocator),
+                            w / 2 - tw / 2,
+                            y0 + i32(i) * gap,
+                            font_sz, C_PURPLE)
+                    }
                 }
 
-                rl.DrawRectangleRec(card.visual.dest, card.visual.color)
+                // Decorative dice (left/right)
+                DrawRectangle(12, 60, 12, 12, C_ORANGE)
+                DrawText("1", 15, 62, 8, C_YELLOW)
+                DrawRectangle(w-24, 82, 12, 12, C_ORANGE)
+                DrawText("6", w-21, 84, 8, C_YELLOW)
+
+                // Footer
+                DrawText("ENTER: SELECT   ESC: QUIT",
+                    6, h - 14,
+                    2, C_PURPLE)
+
+            }
+        case .DUNGEON:
+            {
+                ClearBackground(C_YELLOW)
+
+                current_row_idx := Objects[0].stats_player.row_current
+                for i := 0; i < CARDS_PER_ROW; i+=1  {
+                    card := &GameState.rows[current_row_idx].cards[i]
+
+                    card.visual.dest = Rectangle{
+                        f32(40 * (i + 1) - 6),
+                        GameData.internal_res.y / 2 + 28,
+                        12, 16
+                    }
+
+                    DrawRectangleRec(card.visual.dest, card.visual.color)
+                }
+
+                for row_idx := current_row_idx + 1; row_idx < ROWS; row_idx += 1 {
+                    for card_idx := 0; card_idx < CARDS_PER_ROW; card_idx += 1  {
+                        card := &GameState.rows[row_idx].cards[card_idx]
+
+                        card.visual.dest = Rectangle{
+                            f32(40 * (card_idx + 1) - 6),
+                            f32(100) - f32((row_idx - current_row_idx) * 24),
+                            12, 16
+                        }
+
+                        DrawRectangleRec(card.visual.dest, card.visual.color)
+                    }
+                }
+
+                {
+                    sel := GameState.rows[current_row_idx].cards[GameState.card_selected_idx]
+                    DrawRectangleLines(
+                        i32(sel.visual.dest.x), i32(sel.visual.dest.y),
+                        i32(sel.visual.dest.width), i32(sel.visual.dest.height),
+                        C_PURPLE
+                    )
+                }
+
+                y_pos := i32(GameData.internal_res.y - 15)
+                text_offset : i32 = 2
+                DrawRectangle(0, y_pos, w, 20, C_PURPLE)
+
+                DrawText(TextFormat("HP: %i", Objects[0].stats_player.hp),
+                    i32(GameData.internal_res.x - 150),
+                    y_pos + text_offset,
+                    2, C_ORANGE)
+                DrawText(TextFormat("/%i", Objects[0].stats_player.max_hp),
+                    i32(GameData.internal_res.x - 120),
+                    y_pos + text_offset,
+                    2, C_ORANGE)
+                DrawText(TextFormat("GOLD: %i", Objects[0].stats_player.gold),
+                    i32(GameData.internal_res.x - 50),
+                    y_pos + text_offset,
+                    2, C_YELLOW)
+
+                DrawRectangleRec(Objects[0].visual.dest, Objects[0].visual.color)
+            }
+        case .VICTORY:
+            {
+                ClearBackground(C_YELLOW)
+
+                // Title
+                t := "YOU SURVIVED!"
+                tsz : i32 = 8
+                tw  := MeasureText(clone_to_cstring(t, context.temp_allocator), tsz)
+                DrawText(clone_to_cstring(t, context.temp_allocator),
+                    w/2 - tw/2, 12,
+                    tsz, C_PURPLE)
+
+                // Stats
+                font_sz  : i32 = 2
+                line_gap : i32 = 20
+                y0       : i32 = 48
+
+                row_text    := TextFormat("You cleared Row %d!",
+                    Objects[0].stats_player.row_current + 1)
+                gold_text   := TextFormat("Final Gold: %d",
+                    Objects[0].stats_player.gold)
+                restart_txt := "Press R to Restart"
+
+                DrawText(row_text,
+                    20, y0,
+                    font_sz, C_PURPLE)
+
+                DrawText(gold_text,
+                    20, y0 + line_gap,
+                    font_sz, C_PURPLE)
+
+                DrawText(clone_to_cstring(restart_txt, context.temp_allocator),
+                    20, y0 + 2*line_gap,
+                    font_sz, C_PURPLE)
+
+                // Footer
+                DrawText("ESC: MAIN MENU",
+                    6, h - 14,
+                    2, C_PURPLE)
+            }
+        case .DEFEAT:
+            {
+                ClearBackground(C_PURPLE)
+
+                // Title
+                t := "YOU DIED!"
+                tsz : i32 = 20
+                tw  := MeasureText(clone_to_cstring(t, context.temp_allocator), tsz)
+                DrawText(clone_to_cstring(t, context.temp_allocator),
+                    w / 2 - tw / 2, 35,
+                    tsz, C_ORANGE)
+
+                // Options
+                font_sz : i32 = 2
+                y0      : i32 = 72
+                gap     : i32 = 22
+                sel     := &GameState.selected_menu_btn
+
+                for i in 0..<len(defeat_menu_options) {
+                    label := defeat_menu_options[i]
+                    tw := MeasureText(clone_to_cstring(label, context.temp_allocator), font_sz)
+
+                    bx := w/2 - (tw/2) - 6
+                    by := y0 + i32(i) * gap - 4
+                    bw := tw + 12
+                    bh := font_sz + 16
+                    active := i == sel^
+
+                    DrawRectangleLines(bx, by, bw, bh,C_ORANGE)
+                    if active {
+                        DrawRectangle(bx, by, bw, bh, C_GREEN)
+                        DrawText(clone_to_cstring(label, context.temp_allocator),
+                            bx+6, by+4,
+                            font_sz, C_YELLOW)
+                    } else {
+                        DrawText(clone_to_cstring(label, context.temp_allocator),
+                            w/2 - tw/2, y0 + i32(i)*gap,
+                            font_sz, C_YELLOW)
+                    }
+                }
+
+                // Footer
+                DrawText("ENTER: CONFIRM ESC: MAIN MENU",
+                    6, h-14,
+                    2, C_YELLOW)
+            }
+        case .HOW_TO_PLAY:
+            {
+                ClearBackground(C_YELLOW)
+                w := i32(GameData.internal_res.x)
+                h := i32(GameData.internal_res.y)
+
+                // Title bar
+                DrawRectangle(0, 0, w, 20, C_PURPLE)
+                DrawText("HOW TO PLAY", center_x(w, "HOW TO PLAY", 8), 5, 2, C_YELLOW)
+
+                x : i32 = 2
+                y : i32 = 28
+                fs : i32 = 2   // font size
+                lh : i32 = 8  // line height
+                ls : i32 = 4   // line spacing
+
+                DrawText("1)Pick ONE of 3 cards each row", x, y, fs, C_PURPLE)
+                y += lh
+                DrawText("  - Enemy: Lose HP, gain Gold",  x, y, fs, C_PURPLE)
+                y += lh
+                DrawText("  - Potion: Heal HP",            x, y, fs, C_PURPLE)
+                y += lh
+                DrawText("  - Treasure: Gain Gold",        x, y, fs, C_PURPLE)
+                y += lh
+                y += ls
+
+                DrawText("2)Dice of Fate after each pick:", x, y, fs, C_PURPLE)
+                y += lh
+                DrawText("  - 1 = Unlucky (bad twist)",     x, y, fs, C_PURPLE)
+                y += lh
+                DrawText("  - 6 = Lucky (big bonus)",       x, y, fs, C_PURPLE)
+                y += lh
+                DrawText("  - 2-5 = Normal",                x, y, fs, C_PURPLE)
+                y += lh
+                y += ls
+
+                DrawText("3)Survive to ROW 13.",            x, y, fs, C_PURPLE)
+                y += lh
+                DrawText("  - On row 13: all rolls = 1.",     x, y, fs, C_PURPLE)
+                y += lh
+
+                // Dice
+                dice_offset :i32 = 26
+                DrawRectangle(w - 24, h - dice_offset, 12, 12, C_ORANGE)
+                DrawText("1", w - 21, h - dice_offset, fs, C_YELLOW)
+                DrawRectangle(8, h - dice_offset, 10, 12, C_GREEN)
+                DrawText("6", 11, h - dice_offset, fs, C_YELLOW)
+
+                // Footer hint
+                DrawText("ENTER/ESC: Back", 6, h - 14, 6, C_PURPLE)
             }
         }
 
+        // constant title
+        DrawRectangle(0, 0, w, 20, C_PURPLE)
         {
-            sel := GameState.rows[current_row_idx].cards[GameState.card_selected_idx]
-            DrawRectangleLines(
-                i32(sel.visual.dest.x), i32(sel.visual.dest.y),
-                i32(sel.visual.dest.width), i32(sel.visual.dest.height),
-                C_YELLOW
-            )
+            DrawText("UNLUCKY FORWARD",
+                 center_x(w, "UNLUCKY FORWARD", 2),
+                 5,
+                 2, C_YELLOW)
         }
-
-        DrawText(TextFormat("HP: %i", Objects[0].stats_player.hp),
-            i32(GameData.internal_res.x - 150),
-            i32(GameData.internal_res.y - 20),
-            2, RED)
-        DrawText(TextFormat("/%i", Objects[0].stats_player.max_hp),
-            i32(GameData.internal_res.x - 120),
-            i32(GameData.internal_res.y - 20),
-            2, RED)
-        DrawText(TextFormat("GOLD: %i", Objects[0].stats_player.gold),
-            i32(GameData.internal_res.x - 50),
-            i32(GameData.internal_res.y - 20),
-            2, YELLOW)
-
         // --
-    rl.EndTextureMode()
+    EndTextureMode()
 
-    rl.BeginDrawing()
-        rl.ClearBackground(C_PURPLE)
-        // raylib's render textures are vertically flipped, so use a negative source height
-        src := rl.Rectangle{
+    BeginDrawing()
+        src := Rectangle{
             0, 0,
             f32(GameData.internal_res.x),
             -f32(GameData.internal_res.y),
         }
-        dst := rl.Rectangle{
+        dst := Rectangle{
             0, 0,
             f32(GameData.scaled_res.x),
             f32(GameData.scaled_res.y),
         }
-        origin := rl.Vector2{ 0, 0 }
+        origin := Vector2{ 0, 0 }
 
-        rl.DrawTexturePro(GameData.rt.texture, src, dst, origin, 0.0, rl.WHITE)
-    rl.EndDrawing()
+        DrawTexturePro(GameData.rt.texture, src, dst, origin, 0.0, WHITE)
+    EndDrawing()
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -478,6 +796,8 @@ main :: proc() {
     process_input()
     update()
     render()
+
+    free_all(context.temp_allocator)
   }
 
   free_resources()

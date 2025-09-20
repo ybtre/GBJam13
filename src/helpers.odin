@@ -1,6 +1,7 @@
 package unlucky_dungeon
 
 import rl "vendor:raylib"
+import "core:strings"
 
 /////////////////////////////////////////////////////////////////////
 // Helpers related
@@ -47,4 +48,11 @@ clamp_f01 :: proc(x: f32) -> f32 {
 norm_t :: proc(row_idx: int) -> f32 {
     // 1..13 -> 0..1
     return cast(f32)(row_idx - 1) / cast(f32)(ROWS - 1)
+}
+
+//measure and center text on x axis
+center_x :: proc(w: i32, text: string, size: i32) -> i32 {
+    cstr := strings.clone_to_cstring(text, context.temp_allocator)
+
+    return w / 2 - rl.MeasureText(cstr, size) / 2
 }

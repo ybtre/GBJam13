@@ -40,11 +40,22 @@ row_values :: struct {
 }
 
 /////////////////////////////////////////////////////////////////////
+menu_state :: enum {
+    MAIN_MENU,
+    DUNGEON,
+    VICTORY,
+    DEFEAT,
+    HOW_TO_PLAY,
+}
+
+/////////////////////////////////////////////////////////////////////
 game_state :: struct {
     seed                : u64,
     rows                : [ROWS]row,
     card_selected_idx   : int,
-    resolve_move        : bool
+    resolve_move        : bool,
+    menu_state          : menu_state,
+    selected_menu_btn   : int,
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -117,3 +128,6 @@ GameState : game_state
 // Global varialbes for execution status and game loop
 /////////////////////////////////////////////////////////////////////
 is_running          : = false
+
+main_menu_options := []string{"START GAME", "HOW TO PLAY", "QUIT"}
+defeat_menu_options := []string{"RETRY", "MAIN MENU"}
