@@ -773,6 +773,12 @@ render :: proc() {
                         i32(GameData.internal_res.x - 150),
                         i32(GameData.internal_res.y - 25),
                         2, C_GREEN)
+
+                    draw_dice(
+                        i32(GameData.internal_res.x - 25),
+                        i32(GameData.internal_res.y - 30),
+                        int(dice.last_roll)
+                    )
                 }
 
                 y_pos := i32(GameData.internal_res.y - 15)
