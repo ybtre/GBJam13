@@ -56,3 +56,6 @@ center_x :: proc(w: i32, text: string, size: i32) -> i32 {
 
     return w / 2 - rl.MeasureText(cstr, size) / 2
 }
+
+dice_is_unlucky :: proc(d: ^Dice) -> bool { return d.last_roll == 1 }
+dice_is_lucky   :: proc(d: ^Dice) -> bool { return d.last_roll == 6 }

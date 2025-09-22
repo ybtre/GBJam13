@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "core:math"
 import "core:strings"
+import rand "core:math/rand"
 import rl "vendor:raylib"
 
 /////////////////////////////////////////////////////////////////////
@@ -203,6 +204,9 @@ resolve_move :: proc() {
     card := &GameState.rows[row_idx].cards[card_idx]
     row := GameState.rows[row_idx]
 
+    // 1=unlucky, 6=lucky, 2–5=normal
+    roll := dice_roll_d6(&dice, i32(row_idx))
+
     // Enemy:    value_a = damage, value_b = gold
     // Potion:   value_a = heal,   value_b = poison_dmg_on_unlucky (ref)
     // Treasure: value_a = gold,   value_b = mimic_dmg_on_unlucky   (ref)
@@ -210,18 +214,52 @@ resolve_move :: proc() {
         case .ENEMY:{
             if !row.cursed
             {
-                player.stats_player.hp -= card.stats_card.val_a
-                player.stats_player.gold += card.stats_card.val_b
+                dmg := card.stats_card.val_a
+                gold := card.stats_card.val_b
+
+                if roll == 1 {
+                   dmg += 2
+                   gold -= 2
+                }
+                if roll == 6 {
+                    dmg -= 2
+                    gold += 2
+                }
+
+                player.stats_player.hp -= dmg
+                player.stats_player.gold += gold
             }
             else
             {
+                dice.last_roll = 1
 
+                dmg := card.stats_card.val_a
+                gold := card.stats_card.val_b
+
+                if dice.last_roll == 1 {
+                   dmg += 2
+                   gold -= 2
+                }
+
+                player.stats_player.hp -= dmg
+                player.stats_player.gold += gold
             }
         }
         case .POTION:{
             if !row.cursed
             {
-                player.stats_player.hp += card.stats_card.val_a
+                heal := card.stats_card.val_a
+                if roll == 1 {
+                    poison := card.stats_card.val_b
+                    player.stats_player.hp -= poison
+                } else if roll == 6 {
+                    heal *= 2
+                    player.stats_player.hp += heal
+                } else {
+                    player.stats_player.hp += heal
+                }
+
+                player.stats_player.hp += heal
                 if player.stats_player.hp > player.stats_player.max_hp
                 {
                     player.stats_player.hp = player.stats_player.max_hp
@@ -229,22 +267,75 @@ resolve_move :: proc() {
             }
             else
             {
+                dice.last_roll = 1
 
+                heal := card.stats_card.val_a
+
+                if dice.last_roll == 1 {
+                    poison := card.stats_card.val_b
+                    player.stats_player.hp -= poison
+                }
+
+                player.stats_player.hp += heal
+                if player.stats_player.hp > player.stats_player.max_hp
+                {
+                    player.stats_player.hp = player.stats_player.max_hp
+                }
             }
         }
         case.TREASURE:{
             if !row.cursed
             {
-                player.stats_player.gold += card.stats_card.val_a
+                gold := card.stats_card.val_a
+
+                if roll == 1 {
+                    mimic := card.stats_card.val_b
+                    player.stats_player.hp -= mimic
+                } else if roll == 6 {
+                    player.stats_player.gold += gold * 2
+                } else {
+                    player.stats_player.gold += gold
+                }
             }
             else
             {
+                dice.last_roll = 1
 
+                if dice.last_roll == 1 {
+                    mimic := card.stats_card.val_b
+                    player.stats_player.hp -= mimic
+                }
             }
         }
     }
 
     GameState.resolve_move = true
+}
+
+/////////////////////////////////////////////////////////////////////
+dice_init :: proc(d: ^Dice, seed: u64) {
+    rand.init(&d.rand, seed)
+    d.last_roll = 0
+}
+
+/////////////////////////////////////////////////////////////////////
+dice_roll_d6 :: proc(d: ^Dice, row: i32) -> i32 {
+    if row >= 13 {
+        d.last_roll = 1
+        return d.last_roll
+    }
+    data: [6]i32 = { 1, 2, 3, 4, 5, 6 }
+    r := rand.choice(data[:])
+
+    // Late-game unlucky tilt: rows 10–12 downgrade some 2's → 1
+    if row >= 10 && row <= 12 && r == 2 {
+        if rand.float32() < 0.20 { // 20% bias
+            r = 1
+        }
+    }
+
+    d.last_roll = r
+    return r
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -254,6 +345,72 @@ reset_player :: proc()
     Objects[0].stats_player.hp = Objects[0].stats_player.max_hp
     Objects[0].stats_player.gold = 0
     Objects[0].stats_player.row_current = 0
+}
+
+
+/////////////////////////////////////////////////////////////////////
+draw_dice :: proc(x, y: i32, value: int) {
+    size : i32 = 12
+    rl.DrawRectangle(x, y, size, size, C_ORANGE)
+
+    txt := fmt.tprintf("%d", value)
+    font_sz : i32 = 8
+    tw := rl.MeasureText(strings.clone_to_cstring(txt, context.temp_allocator), font_sz)
+
+    rl.DrawText(strings.clone_to_cstring(txt, context.temp_allocator),
+        x + size/2 - tw/2,
+        y + size/2 - font_sz/2,
+        font_sz, C_YELLOW)
+}
+
+/////////////////////////////////////////////////////////////////////
+draw_icon_enemy :: proc(x, y, s: i32) {
+    using rl
+
+    cx := x + s/2
+
+    DrawLine(x, y, x+s, y, C_PURPLE)
+    DrawLine(x+s, y, cx, y+s, C_PURPLE)
+    DrawLine(cx, y+s, x, y, C_PURPLE)
+}
+
+/////////////////////////////////////////////////////////////////////
+draw_icon_potion :: proc(x, y, r: i32) {
+    using rl
+
+    DrawCircle(x-1, y+3, f32(r-1), C_GREEN)
+    DrawCircleLines(x-1, y+3, f32(r-1), C_PURPLE)
+
+    DrawCircle(x+2, y-1, f32(r-2), C_GREEN)
+    DrawCircleLines(x+2, y-1, f32(r-2), C_PURPLE)
+
+    DrawCircle(x, y-4, f32(r-2), C_GREEN)
+    DrawCircleLines(x, y-4, f32(r-2), C_PURPLE)
+}
+
+/////////////////////////////////////////////////////////////////////
+draw_icon_treasure :: proc(x, y, s: i32) {
+    using rl
+
+    cx := x + s/2
+    cy := y + s/2
+
+    DrawTriangle(
+        Vector2{f32(cx), f32(y)},
+        Vector2{f32(x), f32(cy)},
+        Vector2{f32(cx), f32(y+s)},
+        C_YELLOW)
+    DrawTriangle(
+        Vector2{f32(cx), f32(y+s)},
+        Vector2{f32(x+s), f32(cy)},
+        Vector2{f32(cx), f32(y)},
+        C_YELLOW)
+
+    // outline diamond
+    DrawLine(x, cy, cx, y, C_PURPLE)
+    DrawLine(cx, y, x+s, cy, C_PURPLE)
+    DrawLine(x+s, cy, cx, y+s, C_PURPLE)
+    DrawLine(cx, y+s, x, cy, C_PURPLE)
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -313,9 +470,11 @@ InitRunState :: proc()
     GameState.card_selected_idx = 1;
 
     // choose once per run, record for logs
-    run_seed := u64(0xBADC0FFEE)
+    run_seed := u64(0x42424242)
     GameState.seed = run_seed
     generate_dungeon(GameState.seed)
+
+    dice_init(&dice, 0x42424242)
 
     GameState.menu_state = .DUNGEON
 }
@@ -474,34 +633,6 @@ update :: proc() {
 }
 
 /////////////////////////////////////////////////////////////////////
-DrawIcon_Enemy :: proc(x, y, s: i32) {
-    using rl
-
-    DrawRectangle(x, y, s, s, C_PURPLE)
-    DrawRectangleLines(x, y, s, s, C_YELLOW)
-}
-
-/////////////////////////////////////////////////////////////////////
-DrawIcon_Potion :: proc(x, y, r: i32) {
-    using rl
-
-    DrawCircle(x-1, y+3, f32(r-1), C_GREEN)
-    DrawCircleLines(x-1, y+3, f32(r-1), C_PURPLE)
-
-    DrawCircle(x+2, y-1, f32(r-2), C_GREEN)
-    DrawCircleLines(x+2, y-1, f32(r-2), C_PURPLE)
-
-    DrawCircle(x, y-4, f32(r-2), C_GREEN)
-    DrawCircleLines(x, y-4, f32(r-2), C_PURPLE)
-}
-
-/////////////////////////////////////////////////////////////////////
-DrawIcon_Treasure :: proc(x, y, r: i32) {
-    rl.DrawCircle(x, y, f32(r), C_GREEN)
-    rl.DrawCircleLines(x, y, f32(r), C_PURPLE)
-}
-
-/////////////////////////////////////////////////////////////////////
 render :: proc() {
     using rl
     using strings
@@ -551,10 +682,8 @@ render :: proc() {
                 }
 
                 // Decorative dice (left/right)
-                DrawRectangle(12, 60, 12, 12, C_ORANGE)
-                DrawText("1", 15, 62, 8, C_YELLOW)
-                DrawRectangle(w-24, 82, 12, 12, C_ORANGE)
-                DrawText("6", w-21, 84, 8, C_YELLOW)
+                draw_dice(12, 60, 1)
+                draw_dice(w-24, 82, 6)
 
                 // Footer
                 DrawText("ENTER: SELECT   ESC: QUIT",
@@ -567,6 +696,14 @@ render :: proc() {
                 ClearBackground(C_YELLOW)
 
                 current_row_idx := Objects[0].stats_player.row_current
+
+                if current_row_idx == 12 {
+
+                    DrawRectangle(0, i32(GameData.internal_res.y /2+26),
+                        200, 20,
+                        C_PURPLE)
+                }
+
                 for i := 0; i < CARDS_PER_ROW; i+=1  {
                     card := &GameState.rows[current_row_idx].cards[i]
 
@@ -583,15 +720,15 @@ render :: proc() {
 
                     if card.type == .ENEMY
                     {
-                        DrawIcon_Enemy(i32(x+3), i32(y+4), 6)
+                        draw_icon_enemy(i32(x+2), i32(y+4), 8)
                     }
                     if card.type == .POTION
                     {
-                        DrawIcon_Potion(i32(x+6), i32(y+8), 4)
+                        draw_icon_potion(i32(x+6), i32(y+8), 4)
                     }
                     if card.type == .TREASURE
                     {
-
+                        draw_icon_treasure(i32(x) + 1, i32(y) + 2, 10)
                     }
                 }
 
@@ -611,15 +748,15 @@ render :: proc() {
 
                         if card.type == .ENEMY
                         {
-                            DrawIcon_Enemy(i32(x+3), i32(y+4), 6)
+                            draw_icon_enemy(i32(x+2), i32(y+4), 8)
                         }
                         if card.type == .POTION
                         {
-                            DrawIcon_Potion(i32(x+6), i32(y+8), 4)
+                            draw_icon_potion(i32(x+6), i32(y+8), 4)
                         }
                         if card.type == .TREASURE
                         {
-
+                            draw_icon_treasure(i32(x) + 1, i32(y) + 2, 10)
                         }
                     }
                 }
@@ -631,6 +768,11 @@ render :: proc() {
                         i32(sel.visual.dest.width), i32(sel.visual.dest.height),
                         C_PURPLE
                     )
+
+                    DrawText(TextFormat("%s", sel.type),
+                        i32(GameData.internal_res.x - 150),
+                        i32(GameData.internal_res.y - 25),
+                        2, C_GREEN)
                 }
 
                 y_pos := i32(GameData.internal_res.y - 15)
@@ -792,8 +934,8 @@ render :: proc() {
         }
 
         // constant title
-        DrawRectangle(0, 0, w, 20, C_PURPLE)
         {
+            DrawRectangle(0, 0, w, 20, C_PURPLE)
             DrawText("UNLUCKY FORWARD",
                  center_x(w, "UNLUCKY FORWARD", 2),
                  5,
