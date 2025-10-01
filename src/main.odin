@@ -10,6 +10,7 @@ import rl "vendor:raylib"
 /////////////////////////////////////////////////////////////////////
 // DONE;
 /////////////////////////////////////////////////////////////////////
+//v0.1 - jam version
 //  -Create Player struct/class.
 //  -Add HP, Gold, RowIndex, MaxHP.
 //  -Add Reset() function.
@@ -32,14 +33,15 @@ import rl "vendor:raylib"
 /////////////////////////////////////////////////////////////////////
 // TO DO:
 /////////////////////////////////////////////////////////////////////
-//  -Fields: baseValue(s), rowIndex, modifiers.
-// Weights per row
-//  Allow full enemy rows only after row 8.
-// Cursed (Row 13 only)
-//  Enemy = extra damage.
-//  Potion = poison damage.
-//  Treasure = mimic (HP loss).
-//
+//v0.2 - post jam version
+// clean up and reorganize code (maybe)
+// ramp up difficulty
+// sound effects and music
+// add sprites for cards to communicate better card types
+// UI/UX improvements 
+// polish and juice
+
+
 
 /////////////////////////////////////////////////////////////////////
 compute_row_values :: proc(row_idx: int) -> row_values {
@@ -51,35 +53,22 @@ compute_row_values :: proc(row_idx: int) -> row_values {
     w_treasure := clamp_f01(1.0 - (w_enemy + w_potion))
 
     enemy_dmg : int
-    if row_idx >= 9 { enemy_dmg = 3 }
-    else if row_idx >= 4 { enemy_dmg = 2 }
-    else { enemy_dmg = 1 }
+    enemy_dmg = int(math.roundf32(lerp(1, 4, t^1.2)))
 
     enemy_gold : int
-    if row_idx >= 5 { enemy_gold = 2 }
-    else { enemy_gold = 1 }
-    if row_idx >= 10 { enemy_gold = 3 }
+    enemy_gold = int(math.roundf32(lerp(1, 3, t)))
 
     potion_heal : int
-    if row_idx >= 9 { potion_heal = 2 }
-    else if row_idx >= 3 { potion_heal = 3 }
-    else { potion_heal = 4 }
+    potion_heal = int(math.roundf32(lerp(4, 2, t)))
 
     poison_dmg : int
-    if row_idx >= 12 { poison_dmg = 4 }
-    else if row_idx >= 7 { poison_dmg = 3 }
-    else { poison_dmg = 2 }
+    potion_dmg = int(math.roundf32(lerp(2, 4, t)))
 
     chest_gold : int
-    if row_idx >= 12 { chest_gold = 5 }
-    else if row_idx >= 8 { chest_gold = 4 }
-    else if row_idx >= 4 { chest_gold = 3 }
-    else { chest_gold = 2 }
+    chest_gold = int(math.roundf32(lerp(2, 5, t)))
 
     mimic_dmg : int
-    if row_idx >= 10 { mimic_dmg = 3 }
-    else if row_idx >= 5 { mimic_dmg = 2 }
-    else { mimic_dmg = 1 }
+    mimic_dmg = int(math.roundf32(lerp(1, 4, t)))
 
     // Dice bias (2→1 downgrade chance). Row 13 handled at gameplay (treat as 1).
     dice_bias_percent: f32
@@ -142,6 +131,8 @@ generate_dungeon :: proc(seed : u64) {
                 if rv.w_potion >= rv.w_treasure { card_type = obj_type.POTION}
                 else { card_type = obj_type.TREASURE }
             }
+
+            if rowid    
 
             if card_type != .ENEMY {
                 non_enemy_count += 1
