@@ -36,10 +36,10 @@ import rl "vendor:raylib"
 //v0.2 - post jam version
 // clean up and reorganize code (maybe)
 // ramp up difficulty
+// polish and juice
 // sound effects and music
 // add sprites for cards to communicate better card types
 // UI/UX improvements 
-// polish and juice
 
 
 
